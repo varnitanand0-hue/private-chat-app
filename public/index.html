@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Room</title>
+    <title>Private Chat Room</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         :root {
@@ -325,7 +325,7 @@
 <body>
     <div class="login-container" id="loginContainer">
         <div class="login-box">
-            <h1>💬 Chat Room</h1>
+            <h1>💬 Private Chat Room</h1>
             <form id="loginForm">
                 <div class="form-group">
                     <label for="username">Your Name</label>
@@ -374,6 +374,7 @@
         let isTyping = false;
         let typingTimeout;
         let socket;
+        let messageHistory = [];
 
         const loginContainer = document.getElementById('loginContainer');
         const chatContainer = document.getElementById('chatContainer');
@@ -407,6 +408,9 @@
             roomTitle.textContent = `Room: ${currentRoom}`;
             messageInput.focus();
             
+            // Load message history from localStorage
+            loadMessageHistory();
+            
             // Initialize Socket.IO connection
             initializeSocket();
         }
@@ -430,6 +434,7 @@
             
             socket.on('receive-message', (message) => {
                 displayMessage(message, false);
+                saveToHistory(message);
             });
             
             socket.on('user-typing', (data) => {
@@ -480,6 +485,9 @@
             // Display locally
             displayMessage(message, true);
             
+            // Save to history
+            saveToHistory(message);
+            
             // Send via Socket.IO
             socket.emit('send-message', message);
             
@@ -491,6 +499,7 @@
         function displayMessage(message, isSent) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+            messageDiv.setAttribute('data-id', message.id);
             
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
@@ -508,6 +517,41 @@
             messagesContainer.appendChild(messageDiv);
             
             scrollToBottom();
+        }
+
+        // Message history functions
+        function saveToHistory(message) {
+            // Load existing history
+            const historyKey = `chat_history_${currentRoom}`;
+            let history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+            
+            // Check if message already exists (avoid duplicates)
+            const exists = history.some(m => m.id === message.id);
+            if (!exists) {
+                history.push(message);
+                
+                // Keep only last 500 messages to avoid storage limits
+                if (history.length > 500) {
+                    history = history.slice(-500);
+                }
+                
+                localStorage.setItem(historyKey, JSON.stringify(history));
+            }
+        }
+
+        function loadMessageHistory() {
+            const historyKey = `chat_history_${currentRoom}`;
+            const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+            
+            if (history.length > 0) {
+                // Display all historical messages
+                history.forEach(message => {
+                    const isSent = message.username === currentUser;
+                    displayMessage(message, isSent);
+                });
+                
+                console.log(`Loaded ${history.length} messages from history`);
+            }
         }
 
         // Typing indicator
@@ -543,9 +587,20 @@
         // Utility functions
         function formatTime(timestamp) {
             const date = new Date(timestamp);
+            const now = new Date();
+            const isToday = date.toDateString() === now.toDateString();
+            
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
-            return `${hours}:${minutes}`;
+            const timeStr = `${hours}:${minutes}`;
+            
+            if (!isToday) {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                return `${day}/${month} ${timeStr}`;
+            }
+            
+            return timeStr;
         }
 
         function scrollToBottom() {
@@ -561,5 +616,3 @@
     </script>
 </body>
 </html>
-
-
